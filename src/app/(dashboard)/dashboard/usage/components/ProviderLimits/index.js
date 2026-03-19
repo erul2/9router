@@ -387,15 +387,15 @@ export default function ProviderLimits() {
       </div>
 
       {/* Provider Cards Grid */}
-      <div className={compactMode ? "md:columns-2 columns-1 gap-3 [column-fill:_balance]" : "flex flex-col gap-4"}>
+      <div className={compactMode ? "grid grid-cols-1 md:grid-cols-2 gap-3 items-start" : "flex flex-col gap-4"}>
         {sortedConnections.map((conn) => {
           const quota = quotaData[conn.id];
           const isLoading = loading[conn.id];
           const error = errors[conn.id];
 
           return (
-            <div key={conn.id} className={compactMode ? "mb-3 break-inside-avoid" : ""}>
-              <Card padding="none">
+            <div key={conn.id} className={compactMode ? "h-full" : ""}>
+              <Card padding="none" className={compactMode ? "h-full" : undefined}>
               <div className={`${compactMode ? "p-3" : "p-6"} border-b border-black/10 dark:border-white/10`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
