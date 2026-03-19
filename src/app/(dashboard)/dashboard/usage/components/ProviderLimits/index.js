@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
-import ProviderLimitCard from "./ProviderLimitCard";
 import QuotaTable from "./QuotaTable";
 import { parseQuotaData, calculatePercentage } from "./utils";
 import Card from "@/shared/components/Card";
@@ -10,6 +9,7 @@ import Button from "@/shared/components/Button";
 import { USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
 
 const REFRESH_INTERVAL_MS = 60000; // 60 seconds
+const COMPACT_MODE_STORAGE_KEY = "provider-limits-compact-mode";
 
 export default function ProviderLimits() {
   const [connections, setConnections] = useState([]);
@@ -17,6 +17,7 @@ export default function ProviderLimits() {
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [compactMode, setCompactMode] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -24,6 +25,29 @@ export default function ProviderLimits() {
 
   const intervalRef = useRef(null);
   const countdownRef = useRef(null);
+
+  // Restore compact mode preference
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const saved = window.localStorage.getItem(COMPACT_MODE_STORAGE_KEY);
+      if (saved === "true") setCompactMode(true);
+    } catch {
+      // Ignore storage access issues
+    }
+  }, []);
+
+  // Persist compact mode preference
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      window.localStorage.setItem(COMPACT_MODE_STORAGE_KEY, String(compactMode));
+    } catch {
+      // Ignore storage access issues
+    }
+  }, [compactMode]);
 
   // Fetch all provider connections
   const fetchConnections = useCallback(async () => {
@@ -293,19 +317,42 @@ export default function ProviderLimits() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className={compactMode ? "space-y-4" : "space-y-6"}>
       {/* Header Controls */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <h2 className="text-xl font-semibold text-text-primary">
             Provider Limits
           </h2>
           <span className="text-sm text-text-muted">
             Last updated: {formatLastUpdated()}
           </span>
+          <div className="flex items-center gap-2 text-xs text-text-muted">
+            <span>{totalProviders} providers</span>
+            <span>•</span>
+            <span>{activeWithLimits} with quota</span>
+            <span>•</span>
+            <span>{lowQuotasCount} low</span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Compact mode toggle */}
+          <button
+            onClick={() => setCompactMode((prev) => !prev)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+            title={compactMode ? "Disable compact mode" : "Enable compact mode"}
+          >
+            <span
+              className={`material-symbols-outlined text-[18px] ${
+                compactMode ? "text-primary" : "text-text-muted"
+              }`}
+            >
+              {compactMode ? "view_agenda" : "view_stream"}
+            </span>
+            <span className="text-sm text-text-primary">Compact</span>
+          </button>
+
           {/* Auto-refresh toggle */}
           <button
             onClick={() => setAutoRefresh((prev) => !prev)}
@@ -340,34 +387,35 @@ export default function ProviderLimits() {
       </div>
 
       {/* Provider Cards Grid */}
-      <div className="flex flex-col gap-4">
+      <div className={compactMode ? "flex flex-col gap-2" : "flex flex-col gap-4"}>
         {sortedConnections.map((conn) => {
           const quota = quotaData[conn.id];
           const isLoading = loading[conn.id];
           const error = errors[conn.id];
 
-          // Use table layout for all providers
           return (
             <Card key={conn.id} padding="none">
-              <div className="p-6 border-b border-black/10 dark:border-white/10">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
+              <div className={`${compactMode ? "p-3" : "p-6"} border-b border-black/10 dark:border-white/10`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`${compactMode ? "w-8 h-8 rounded-md" : "w-10 h-10 rounded-lg"} flex items-center justify-center overflow-hidden shrink-0`}>
                       <Image
                         src={`/providers/${conn.provider}.png`}
                         alt={conn.provider}
-                        width={40}
-                        height={40}
+                        width={compactMode ? 32 : 40}
+                        height={compactMode ? 32 : 40}
                         className="object-contain"
-                        sizes="40px"
+                        sizes={compactMode ? "32px" : "40px"}
                       />
                     </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-text-primary capitalize">
+                    <div className="min-w-0">
+                      <h3 className={`${compactMode ? "text-sm" : "text-base"} font-semibold text-text-primary capitalize truncate`}>
                         {conn.provider}
                       </h3>
                       {conn.name && (
-                        <p className="text-sm text-text-muted">{conn.name}</p>
+                        <p className={`${compactMode ? "text-xs" : "text-sm"} text-text-muted truncate`}>
+                          {conn.name}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -375,36 +423,36 @@ export default function ProviderLimits() {
                   <button
                     onClick={() => refreshProvider(conn.id, conn.provider)}
                     disabled={isLoading}
-                    className="p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+                    className={`${compactMode ? "p-1.5" : "p-2"} rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors disabled:opacity-50 shrink-0`}
                     title="Refresh quota"
                   >
-                    <span className={`material-symbols-outlined text-[20px] text-text-muted ${isLoading ? "animate-spin" : ""}`}>
+                    <span className={`material-symbols-outlined ${compactMode ? "text-[18px]" : "text-[20px]"} text-text-muted ${isLoading ? "animate-spin" : ""}`}>
                       refresh
                     </span>
                   </button>
                 </div>
               </div>
 
-              <div className="p-6">
+              <div className={compactMode ? "p-3" : "p-6"}>
                 {isLoading ? (
-                  <div className="text-center py-8 text-text-muted">
-                    <span className="material-symbols-outlined text-[32px] animate-spin">
+                  <div className={`text-center ${compactMode ? "py-5" : "py-8"} text-text-muted`}>
+                    <span className={`material-symbols-outlined ${compactMode ? "text-[24px]" : "text-[32px]"} animate-spin`}>
                       progress_activity
                     </span>
                   </div>
                 ) : error ? (
-                  <div className="text-center py-8">
-                    <span className="material-symbols-outlined text-[32px] text-red-500">
+                  <div className={`text-center ${compactMode ? "py-4" : "py-8"}`}>
+                    <span className={`material-symbols-outlined ${compactMode ? "text-[24px]" : "text-[32px]"} text-red-500`}>
                       error
                     </span>
-                    <p className="mt-2 text-sm text-text-muted">{error}</p>
+                    <p className={`mt-2 ${compactMode ? "text-xs" : "text-sm"} text-text-muted`}>{error}</p>
                   </div>
                 ) : quota?.message ? (
-                  <div className="text-center py-8">
-                    <p className="text-sm text-text-muted">{quota.message}</p>
+                  <div className={`text-center ${compactMode ? "py-4" : "py-8"}`}>
+                    <p className={`${compactMode ? "text-xs" : "text-sm"} text-text-muted`}>{quota.message}</p>
                   </div>
                 ) : (
-                  <QuotaTable quotas={quota?.quotas} />
+                  <QuotaTable quotas={quota?.quotas} compact={compactMode} />
                 )}
               </div>
             </Card>

@@ -70,7 +70,7 @@ function getColorClasses(remainingPercentage) {
 /**
  * Quota Table Component - Table-based display for quota data
  */
-export default function QuotaTable({ quotas = [] }) {
+export default function QuotaTable({ quotas = [], compact = false }) {
   if (!quotas || quotas.length === 0) {
     return null;
   }
@@ -79,9 +79,9 @@ export default function QuotaTable({ quotas = [] }) {
     <div className="overflow-x-auto">
       <table className="w-full table-fixed">
         <colgroup>
-          <col className="w-[30%]" /> {/* Model Name */}
-          <col className="w-[45%]" /> {/* Limit Progress */}
-          <col className="w-[25%]" /> {/* Reset Time */}
+          <col className={compact ? "w-[42%]" : "w-[30%]"} />
+          <col className={compact ? "w-[34%]" : "w-[45%]"} />
+          <col className={compact ? "w-[24%]" : "w-[25%]"} />
         </colgroup>
         <tbody>
           {quotas.map((quota, index) => {
@@ -99,19 +99,21 @@ export default function QuotaTable({ quotas = [] }) {
                 className="border-b border-black/5 dark:border-white/5 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
               >
                 {/* Model Name with Status Emoji */}
-                <td className="py-2 px-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs">{colors.emoji}</span>
-                    <span className="text-sm font-medium text-text-primary">{quota.name}</span>
+                <td className={compact ? "py-1.5 px-2 align-top" : "py-2 px-3 align-top"}>
+                  <div className={`flex items-center ${compact ? "gap-1.5" : "gap-2"}`}>
+                    <span className={compact ? "text-[10px] leading-none" : "text-xs"}>{colors.emoji}</span>
+                    <span className={`${compact ? "text-xs leading-4" : "text-sm"} font-medium text-text-primary break-words`}>
+                      {quota.name}
+                    </span>
                   </div>
                 </td>
 
                 {/* Limit (Progress + Numbers) */}
-                <td className="py-2 px-3">
-                  <div className="space-y-1.5">
+                <td className={compact ? "py-1.5 px-2 align-top" : "py-2 px-3 align-top"}>
+                  <div className={compact ? "space-y-1" : "space-y-1.5"}>
                     {/* Progress bar - always show with border for visibility */}
-                    <div className={`h-1.5 rounded-full overflow-hidden border ${colors.bgLight} ${
-                      remaining === 0 ? 'border-black/10 dark:border-white/10' : 'border-transparent'
+                    <div className={`${compact ? "h-1" : "h-1.5"} rounded-full overflow-hidden border ${colors.bgLight} ${
+                      remaining === 0 ? "border-black/10 dark:border-white/10" : "border-transparent"
                     }`}>
                       <div
                         className={`h-full transition-all duration-300 ${colors.bg}`}
@@ -120,11 +122,11 @@ export default function QuotaTable({ quotas = [] }) {
                     </div>
                     
                     {/* Numbers */}
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-text-muted">
+                    <div className={`flex items-center justify-between ${compact ? "text-[11px]" : "text-xs"} gap-2`}>
+                      <span className="text-text-muted truncate">
                         {quota.used.toLocaleString()} / {quota.total > 0 ? quota.total.toLocaleString() : "∞"}
                       </span>
-                      <span className={`font-medium ${colors.text}`}>
+                      <span className={`font-medium shrink-0 ${colors.text}`}>
                         {remaining}%
                       </span>
                     </div>
@@ -132,22 +134,28 @@ export default function QuotaTable({ quotas = [] }) {
                 </td>
 
                 {/* Reset Time */}
-                <td className="py-2 px-3">
+                <td className={compact ? "py-1.5 px-2 align-top" : "py-2 px-3 align-top"}>
                   {countdown !== "-" || resetDisplay ? (
-                    <div className="space-y-0.5">
-                      {countdown !== "-" && (
-                        <div className="text-sm text-text-primary font-medium">
-                          in {countdown}
-                        </div>
-                      )}
-                      {resetDisplay && (
-                        <div className="text-xs text-text-muted">
-                          {resetDisplay}
-                        </div>
-                      )}
-                    </div>
+                    compact ? (
+                      <div className="text-[11px] leading-4 text-text-primary">
+                        {countdown !== "-" ? countdown : (resetDisplay || "N/A")}
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        {countdown !== "-" && (
+                          <div className="text-sm text-text-primary font-medium">
+                            in {countdown}
+                          </div>
+                        )}
+                        {resetDisplay && (
+                          <div className="text-xs text-text-muted">
+                            {resetDisplay}
+                          </div>
+                        )}
+                      </div>
+                    )
                   ) : (
-                    <div className="text-sm text-text-muted italic">N/A</div>
+                    <div className={`${compact ? "text-[11px]" : "text-sm"} text-text-muted italic`}>N/A</div>
                   )}
                 </td>
               </tr>
