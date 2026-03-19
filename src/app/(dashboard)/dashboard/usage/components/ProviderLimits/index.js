@@ -387,7 +387,7 @@ export default function ProviderLimits() {
       </div>
 
       {/* Provider Cards Grid */}
-      <div className={compactMode ? "flex flex-col gap-2" : "flex flex-col gap-4"}>
+      <div className={compactMode ? "grid grid-cols-1 lg:grid-cols-2 gap-3" : "flex flex-col gap-4"}>
         {sortedConnections.map((conn) => {
           const quota = quotaData[conn.id];
           const isLoading = loading[conn.id];
