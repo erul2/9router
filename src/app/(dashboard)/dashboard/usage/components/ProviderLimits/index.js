@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Image from "next/image";
 import QuotaTable from "./QuotaTable";
 import { parseQuotaData, calculatePercentage } from "./utils";
@@ -10,6 +10,8 @@ import { USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
 
 const REFRESH_INTERVAL_MS = 60000; // 60 seconds
 const COMPACT_MODE_STORAGE_KEY = "provider-limits-compact-mode";
+const DEFAULT_VISIBLE_PER_GROUP_COMPACT = 2;
+const DEFAULT_VISIBLE_PER_GROUP_NORMAL = 3;
 
 export default function ProviderLimits() {
   const [connections, setConnections] = useState([]);
@@ -18,6 +20,7 @@ export default function ProviderLimits() {
   const [errors, setErrors] = useState({});
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState({});
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -26,7 +29,6 @@ export default function ProviderLimits() {
   const intervalRef = useRef(null);
   const countdownRef = useRef(null);
 
-  // Restore compact mode preference
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -38,7 +40,6 @@ export default function ProviderLimits() {
     }
   }, []);
 
-  // Persist compact mode preference
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -49,12 +50,11 @@ export default function ProviderLimits() {
     }
   }, [compactMode]);
 
-  // Fetch all provider connections
   const fetchConnections = useCallback(async () => {
     try {
       const response = await fetch("/api/providers/client");
       if (!response.ok) throw new Error("Failed to fetch connections");
-      
+
       const data = await response.json();
       const connectionList = data.connections || [];
       setConnections(connectionList);
@@ -66,7 +66,6 @@ export default function ProviderLimits() {
     }
   }, []);
 
-  // Fetch quota for a specific connection
   const fetchQuota = useCallback(async (connectionId, provider) => {
     setLoading((prev) => ({ ...prev, [connectionId]: true }));
     setErrors((prev) => ({ ...prev, [connectionId]: null }));
@@ -74,20 +73,17 @@ export default function ProviderLimits() {
     try {
       console.log(`[ProviderLimits] Fetching quota for ${provider} (${connectionId})`);
       const response = await fetch(`/api/usage/${connectionId}`);
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errorMsg = errorData.error || response.statusText;
-        
-        // Handle different error types gracefully
+
         if (response.status === 404) {
-          // Connection not found - skip silently
           console.warn(`[ProviderLimits] Connection not found for ${provider}, skipping`);
           return;
         }
-        
+
         if (response.status === 401) {
-          // Auth error - show message instead of throwing
           console.warn(`[ProviderLimits] Auth error for ${provider}:`, errorMsg);
           setQuotaData((prev) => ({
             ...prev,
@@ -98,16 +94,15 @@ export default function ProviderLimits() {
           }));
           return;
         }
-        
+
         throw new Error(`HTTP ${response.status}: ${errorMsg}`);
       }
 
       const data = await response.json();
       console.log(`[ProviderLimits] Got quota for ${provider}:`, data);
-      
-      // Parse quota data using provider-specific parser
+
       const parsedQuotas = parseQuotaData(provider, data);
-      
+
       setQuotaData((prev) => ({
         ...prev,
         [connectionId]: {
@@ -128,7 +123,6 @@ export default function ProviderLimits() {
     }
   }, []);
 
-  // Refresh quota for a specific provider
   const refreshProvider = useCallback(
     async (connectionId, provider) => {
       await fetchQuota(connectionId, provider);
@@ -137,7 +131,6 @@ export default function ProviderLimits() {
     [fetchQuota]
   );
 
-  // Refresh all providers
   const refreshAll = useCallback(async () => {
     if (refreshingAll) return;
 
@@ -146,13 +139,11 @@ export default function ProviderLimits() {
 
     try {
       const conns = await fetchConnections();
-      
-      // Filter only supported OAuth providers
+
       const oauthConnections = conns.filter(
         (conn) => USAGE_SUPPORTED_PROVIDERS.includes(conn.provider) && conn.authType === "oauth"
       );
-      
-      // Fetch quota for supported OAuth connections only
+
       await Promise.all(
         oauthConnections.map((conn) => fetchQuota(conn.id, conn.provider))
       );
@@ -165,7 +156,6 @@ export default function ProviderLimits() {
     }
   }, [refreshingAll, fetchConnections, fetchQuota]);
 
-  // Initial load: fetch connections first so cards render immediately, then fetch quotas
   useEffect(() => {
     const initializeData = async () => {
       setConnectionsLoading(true);
@@ -176,9 +166,10 @@ export default function ProviderLimits() {
         (conn) => USAGE_SUPPORTED_PROVIDERS.includes(conn.provider) && conn.authType === "oauth"
       );
 
-      // Mark all as loading before fetching
       const loadingState = {};
-      oauthConnections.forEach((conn) => { loadingState[conn.id] = true; });
+      oauthConnections.forEach((conn) => {
+        loadingState[conn.id] = true;
+      });
       setLoading(loadingState);
 
       await Promise.all(
@@ -190,7 +181,6 @@ export default function ProviderLimits() {
     initializeData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh interval
   useEffect(() => {
     if (!autoRefresh) {
       if (intervalRef.current) {
@@ -204,12 +194,10 @@ export default function ProviderLimits() {
       return;
     }
 
-    // Main refresh interval
     intervalRef.current = setInterval(() => {
       refreshAll();
     }, REFRESH_INTERVAL_MS);
 
-    // Countdown interval
     countdownRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) return 60;
@@ -223,7 +211,6 @@ export default function ProviderLimits() {
     };
   }, [autoRefresh, refreshAll]);
 
-  // Pause auto-refresh when tab is hidden (Page Visibility API)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -236,7 +223,6 @@ export default function ProviderLimits() {
           countdownRef.current = null;
         }
       } else if (autoRefresh) {
-        // Resume auto-refresh when tab becomes visible
         intervalRef.current = setInterval(refreshAll, REFRESH_INTERVAL_MS);
         countdownRef.current = setInterval(() => {
           setCountdown((prev) => (prev <= 1 ? 60 : prev - 1));
@@ -250,7 +236,6 @@ export default function ProviderLimits() {
     };
   }, [autoRefresh, refreshAll]);
 
-  // Format last updated time
   const formatLastUpdated = useCallback(() => {
     if (!lastUpdated) return "Never";
 
@@ -266,12 +251,10 @@ export default function ProviderLimits() {
     return "Just now";
   }, [lastUpdated]);
 
-  // Filter only supported providers
-  const filteredConnections = connections.filter((conn) =>
-    USAGE_SUPPORTED_PROVIDERS.includes(conn.provider) && conn.authType === "oauth"
+  const filteredConnections = connections.filter(
+    (conn) => USAGE_SUPPORTED_PROVIDERS.includes(conn.provider) && conn.authType === "oauth"
   );
 
-  // Sort providers by USAGE_SUPPORTED_PROVIDERS order, then alphabetically
   const sortedConnections = [...filteredConnections].sort((a, b) => {
     const orderA = USAGE_SUPPORTED_PROVIDERS.indexOf(a.provider);
     const orderB = USAGE_SUPPORTED_PROVIDERS.indexOf(b.provider);
@@ -279,25 +262,42 @@ export default function ProviderLimits() {
     return a.provider.localeCompare(b.provider);
   });
 
-  // Calculate summary stats
+  const groupedConnections = useMemo(() => {
+    const groups = sortedConnections.reduce((acc, conn) => {
+      if (!acc[conn.provider]) acc[conn.provider] = [];
+      acc[conn.provider].push(conn);
+      return acc;
+    }, {});
+
+    return Object.entries(groups).map(([provider, items]) => ({
+      provider,
+      items,
+    }));
+  }, [sortedConnections]);
+
   const totalProviders = sortedConnections.length;
   const activeWithLimits = Object.values(quotaData).filter(
     (data) => data?.quotas?.length > 0
   ).length;
-  
-  // Count low quotas (remaining < 30%)
+
   const lowQuotasCount = Object.values(quotaData).reduce((count, data) => {
     if (!data?.quotas) return count;
-    
+
     const hasLowQuota = data.quotas.some((quota) => {
       const percentage = calculatePercentage(quota.used, quota.total);
       return percentage < 30 && quota.total > 0;
     });
-    
+
     return count + (hasLowQuota ? 1 : 0);
   }, 0);
 
-  // Empty state
+  const toggleGroup = useCallback((provider) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [provider]: !prev[provider],
+    }));
+  }, []);
+
   if (!connectionsLoading && sortedConnections.length === 0) {
     return (
       <Card padding="lg">
@@ -318,7 +318,6 @@ export default function ProviderLimits() {
 
   return (
     <div className={compactMode ? "space-y-4" : "space-y-6"}>
-      {/* Header Controls */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="text-xl font-semibold text-text-primary">
@@ -337,7 +336,6 @@ export default function ProviderLimits() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Compact mode toggle */}
           <button
             onClick={() => setCompactMode((prev) => !prev)}
             className="flex items-center gap-2 px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
@@ -353,7 +351,6 @@ export default function ProviderLimits() {
             <span className="text-sm text-text-primary">Compact</span>
           </button>
 
-          {/* Auto-refresh toggle */}
           <button
             onClick={() => setAutoRefresh((prev) => !prev)}
             className="flex items-center gap-2 px-3 py-2 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
@@ -372,7 +369,6 @@ export default function ProviderLimits() {
             )}
           </button>
 
-          {/* Refresh all button */}
           <Button
             variant="secondary"
             size="md"
@@ -386,78 +382,133 @@ export default function ProviderLimits() {
         </div>
       </div>
 
-      {/* Provider Cards Grid */}
-      <div className={compactMode ? "grid grid-cols-1 md:grid-cols-2 gap-3 items-start" : "flex flex-col gap-4"}>
-        {sortedConnections.map((conn) => {
-          const quota = quotaData[conn.id];
-          const isLoading = loading[conn.id];
-          const error = errors[conn.id];
+      <div className={compactMode ? "space-y-4" : "space-y-6"}>
+        {groupedConnections.map(({ provider, items }) => {
+          const visibleLimit = compactMode
+            ? DEFAULT_VISIBLE_PER_GROUP_COMPACT
+            : DEFAULT_VISIBLE_PER_GROUP_NORMAL;
+          const isExpanded = !!expandedGroups[provider];
+          const visibleItems = isExpanded ? items : items.slice(0, visibleLimit);
+          const hiddenCount = Math.max(0, items.length - visibleItems.length);
 
           return (
-            <div key={conn.id} className={compactMode ? "h-full" : ""}>
-              <Card padding="none" className={compactMode ? "h-full" : undefined}>
-              <div className={`${compactMode ? "p-3" : "p-6"} border-b border-black/10 dark:border-white/10`}>
-                <div className="flex items-center justify-between gap-3">
+            <Card key={provider} padding="none">
+              <div className={`${compactMode ? "p-3" : "p-5"} border-b border-black/10 dark:border-white/10`}>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={`${compactMode ? "w-8 h-8 rounded-md" : "w-10 h-10 rounded-lg"} flex items-center justify-center overflow-hidden shrink-0`}>
+                    <div className={`${compactMode ? "w-9 h-9 rounded-md" : "w-11 h-11 rounded-lg"} flex items-center justify-center overflow-hidden shrink-0 bg-black/[0.03] dark:bg-white/[0.03]`}>
                       <Image
-                        src={`/providers/${conn.provider}.png`}
-                        alt={conn.provider}
-                        width={compactMode ? 32 : 40}
-                        height={compactMode ? 32 : 40}
+                        src={`/providers/${provider}.png`}
+                        alt={provider}
+                        width={compactMode ? 36 : 44}
+                        height={compactMode ? 36 : 44}
                         className="object-contain"
-                        sizes={compactMode ? "32px" : "40px"}
+                        sizes={compactMode ? "36px" : "44px"}
                       />
                     </div>
                     <div className="min-w-0">
-                      <h3 className={`${compactMode ? "text-sm" : "text-base"} font-semibold text-text-primary capitalize truncate`}>
-                        {conn.provider}
+                      <h3 className={`${compactMode ? "text-base" : "text-lg"} font-semibold text-text-primary capitalize truncate`}>
+                        {provider}
                       </h3>
-                      {conn.name && (
-                        <p className={`${compactMode ? "text-xs" : "text-sm"} text-text-muted truncate`}>
-                          {conn.name}
-                        </p>
-                      )}
+                      <p className={`${compactMode ? "text-xs" : "text-sm"} text-text-muted`}>
+                        {items.length} account{items.length > 1 ? "s" : ""}
+                      </p>
                     </div>
                   </div>
-                  
-                  <button
-                    onClick={() => refreshProvider(conn.id, conn.provider)}
-                    disabled={isLoading}
-                    className={`${compactMode ? "p-1.5" : "p-2"} rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors disabled:opacity-50 shrink-0`}
-                    title="Refresh quota"
-                  >
-                    <span className={`material-symbols-outlined ${compactMode ? "text-[18px]" : "text-[20px]"} text-text-muted ${isLoading ? "animate-spin" : ""}`}>
-                      refresh
-                    </span>
-                  </button>
+
+                  {items.length > visibleLimit && (
+                    <button
+                      onClick={() => toggleGroup(provider)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm text-text-primary"
+                    >
+                      <span>{isExpanded ? "Show less" : `Show all (${items.length})`}</span>
+                      <span className="material-symbols-outlined text-[18px]">
+                        {isExpanded ? "expand_less" : "expand_more"}
+                      </span>
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className={compactMode ? "p-3" : "p-6"}>
-                {isLoading ? (
-                  <div className={`text-center ${compactMode ? "py-5" : "py-8"} text-text-muted`}>
-                    <span className={`material-symbols-outlined ${compactMode ? "text-[24px]" : "text-[32px]"} animate-spin`}>
-                      progress_activity
-                    </span>
+              <div className={compactMode ? "p-3" : "p-5"}>
+                <div className={compactMode ? "grid grid-cols-1 md:grid-cols-2 gap-3 items-start" : "flex flex-col gap-4"}>
+                  {visibleItems.map((conn, index) => {
+                    const quota = quotaData[conn.id];
+                    const isLoading = loading[conn.id];
+                    const error = errors[conn.id];
+                    const accountLabel = conn.name || `Account ${index + 1}`;
+
+                    return (
+                      <div key={conn.id} className={compactMode ? "h-full" : ""}>
+                        <Card padding="none" className={compactMode ? "h-full" : undefined}>
+                          <div className={`${compactMode ? "p-3" : "p-5"} border-b border-black/10 dark:border-white/10`}>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <h4 className={`${compactMode ? "text-sm" : "text-base"} font-semibold text-text-primary truncate`}>
+                                  {accountLabel}
+                                </h4>
+                                <p className={`${compactMode ? "text-xs" : "text-sm"} text-text-muted truncate`}>
+                                  {provider}
+                                </p>
+                              </div>
+
+                              <button
+                                onClick={() => refreshProvider(conn.id, conn.provider)}
+                                disabled={isLoading}
+                                className={`${compactMode ? "p-1.5" : "p-2"} rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors disabled:opacity-50 shrink-0`}
+                                title="Refresh quota"
+                              >
+                                <span className={`material-symbols-outlined ${compactMode ? "text-[18px]" : "text-[20px]"} text-text-muted ${isLoading ? "animate-spin" : ""}`}>
+                                  refresh
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className={compactMode ? "p-3" : "p-5"}>
+                            {isLoading ? (
+                              <div className={`text-center ${compactMode ? "py-5" : "py-8"} text-text-muted`}>
+                                <span className={`material-symbols-outlined ${compactMode ? "text-[24px]" : "text-[32px]"} animate-spin`}>
+                                  progress_activity
+                                </span>
+                              </div>
+                            ) : error ? (
+                              <div className={`text-center ${compactMode ? "py-4" : "py-8"}`}>
+                                <span className={`material-symbols-outlined ${compactMode ? "text-[24px]" : "text-[32px]"} text-red-500`}>
+                                  error
+                                </span>
+                                <p className={`mt-2 ${compactMode ? "text-xs" : "text-sm"} text-text-muted`}>
+                                  {error}
+                                </p>
+                              </div>
+                            ) : quota?.message ? (
+                              <div className={`text-center ${compactMode ? "py-4" : "py-8"}`}>
+                                <p className={`${compactMode ? "text-xs" : "text-sm"} text-text-muted`}>
+                                  {quota.message}
+                                </p>
+                              </div>
+                            ) : (
+                              <QuotaTable quotas={quota?.quotas} compact={compactMode} />
+                            )}
+                          </div>
+                        </Card>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {!isExpanded && hiddenCount > 0 && (
+                  <div className="mt-3 text-center">
+                    <button
+                      onClick={() => toggleGroup(provider)}
+                      className="text-sm text-text-muted hover:text-text-primary transition-colors"
+                    >
+                      Show {hiddenCount} more account{hiddenCount > 1 ? "s" : ""}
+                    </button>
                   </div>
-                ) : error ? (
-                  <div className={`text-center ${compactMode ? "py-4" : "py-8"}`}>
-                    <span className={`material-symbols-outlined ${compactMode ? "text-[24px]" : "text-[32px]"} text-red-500`}>
-                      error
-                    </span>
-                    <p className={`mt-2 ${compactMode ? "text-xs" : "text-sm"} text-text-muted`}>{error}</p>
-                  </div>
-                ) : quota?.message ? (
-                  <div className={`text-center ${compactMode ? "py-4" : "py-8"}`}>
-                    <p className={`${compactMode ? "text-xs" : "text-sm"} text-text-muted`}>{quota.message}</p>
-                  </div>
-                ) : (
-                  <QuotaTable quotas={quota?.quotas} compact={compactMode} />
                 )}
               </div>
-              </Card>
-            </div>
+            </Card>
           );
         })}
       </div>
