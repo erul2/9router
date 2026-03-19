@@ -19,7 +19,7 @@ export default function ProviderLimits() {
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const [compactMode, setCompactMode] = useState(false);
+  const [compactMode, setCompactMode] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState({});
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
@@ -34,7 +34,11 @@ export default function ProviderLimits() {
 
     try {
       const saved = window.localStorage.getItem(COMPACT_MODE_STORAGE_KEY);
-      if (saved === "true") setCompactMode(true);
+      if (saved === null) {
+        setCompactMode(true);
+      } else {
+        setCompactMode(saved === "true");
+      }
     } catch {
       // Ignore storage access issues
     }
