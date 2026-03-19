@@ -45,6 +45,7 @@ function getColorClasses(remainingPercentage) {
       text: "text-green-600 dark:text-green-400",
       bg: "bg-green-500",
       bgLight: "bg-green-500/10",
+      border: "border-green-500/20",
       emoji: "🟢"
     };
   }
@@ -54,6 +55,7 @@ function getColorClasses(remainingPercentage) {
       text: "text-yellow-600 dark:text-yellow-400",
       bg: "bg-yellow-500",
       bgLight: "bg-yellow-500/10",
+      border: "border-yellow-500/20",
       emoji: "🟡"
     };
   }
@@ -63,6 +65,7 @@ function getColorClasses(remainingPercentage) {
     text: "text-red-600 dark:text-red-400",
     bg: "bg-red-500",
     bgLight: "bg-red-500/10",
+    border: "border-red-500/20",
     emoji: "🔴"
   };
 }
@@ -75,13 +78,75 @@ export default function QuotaTable({ quotas = [], compact = false }) {
     return null;
   }
 
+  if (compact) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {quotas.map((quota, index) => {
+          const remaining = quota.remainingPercentage !== undefined
+            ? Math.round(quota.remainingPercentage)
+            : calculatePercentage(quota.used, quota.total);
+          
+          const colors = getColorClasses(remaining);
+          const countdown = formatResetTime(quota.resetAt);
+          const resetDisplay = formatResetTimeDisplay(quota.resetAt);
+
+          return (
+            <div
+              key={index}
+              className={`rounded-lg border ${colors.border} bg-black/[0.02] dark:bg-white/[0.02] p-2.5 space-y-2`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex items-start gap-1.5">
+                  <span className="text-[10px] leading-none mt-0.5">{colors.emoji}</span>
+                  <div className="min-w-0">
+                    <div className="text-xs leading-4 font-medium text-text-primary break-words">
+                      {quota.name}
+                    </div>
+                  </div>
+                </div>
+                <div className={`text-[11px] font-semibold shrink-0 ${colors.text}`}>
+                  {remaining}%
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className={`h-1 rounded-full overflow-hidden ${colors.bgLight}`}>
+                  <div
+                    className={`h-full transition-all duration-300 ${colors.bg}`}
+                    style={{ width: `${Math.min(remaining, 100)}%` }}
+                  />
+                </div>
+                <div className="text-[11px] text-text-muted truncate">
+                  {quota.used.toLocaleString()} / {quota.total > 0 ? quota.total.toLocaleString() : "∞"}
+                </div>
+              </div>
+
+              <div className="text-[11px] leading-4 text-text-primary">
+                {countdown !== "-" ? (
+                  <>
+                    <span className="font-medium">Reset </span>
+                    <span>{countdown}</span>
+                  </>
+                ) : resetDisplay ? (
+                  resetDisplay
+                ) : (
+                  <span className="text-text-muted italic">N/A</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full table-fixed">
         <colgroup>
-          <col className={compact ? "w-[42%]" : "w-[30%]"} />
-          <col className={compact ? "w-[34%]" : "w-[45%]"} />
-          <col className={compact ? "w-[24%]" : "w-[25%]"} />
+          <col className="w-[30%]" />
+          <col className="w-[45%]" />
+          <col className="w-[25%]" />
         </colgroup>
         <tbody>
           {quotas.map((quota, index) => {
@@ -99,20 +164,19 @@ export default function QuotaTable({ quotas = [], compact = false }) {
                 className="border-b border-black/5 dark:border-white/5 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
               >
                 {/* Model Name with Status Emoji */}
-                <td className={compact ? "py-1.5 px-2 align-top" : "py-2 px-3 align-top"}>
-                  <div className={`flex items-center ${compact ? "gap-1.5" : "gap-2"}`}>
-                    <span className={compact ? "text-[10px] leading-none" : "text-xs"}>{colors.emoji}</span>
-                    <span className={`${compact ? "text-xs leading-4" : "text-sm"} font-medium text-text-primary break-words`}>
+                <td className="py-2 px-3 align-top">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs">{colors.emoji}</span>
+                    <span className="text-sm font-medium text-text-primary break-words">
                       {quota.name}
                     </span>
                   </div>
                 </td>
 
                 {/* Limit (Progress + Numbers) */}
-                <td className={compact ? "py-1.5 px-2 align-top" : "py-2 px-3 align-top"}>
-                  <div className={compact ? "space-y-1" : "space-y-1.5"}>
-                    {/* Progress bar - always show with border for visibility */}
-                    <div className={`${compact ? "h-1" : "h-1.5"} rounded-full overflow-hidden border ${colors.bgLight} ${
+                <td className="py-2 px-3 align-top">
+                  <div className="space-y-1.5">
+                    <div className={`h-1.5 rounded-full overflow-hidden border ${colors.bgLight} ${
                       remaining === 0 ? "border-black/10 dark:border-white/10" : "border-transparent"
                     }`}>
                       <div
@@ -121,8 +185,7 @@ export default function QuotaTable({ quotas = [], compact = false }) {
                       />
                     </div>
                     
-                    {/* Numbers */}
-                    <div className={`flex items-center justify-between ${compact ? "text-[11px]" : "text-xs"} gap-2`}>
+                    <div className="flex items-center justify-between text-xs gap-2">
                       <span className="text-text-muted truncate">
                         {quota.used.toLocaleString()} / {quota.total > 0 ? quota.total.toLocaleString() : "∞"}
                       </span>
@@ -134,28 +197,22 @@ export default function QuotaTable({ quotas = [], compact = false }) {
                 </td>
 
                 {/* Reset Time */}
-                <td className={compact ? "py-1.5 px-2 align-top" : "py-2 px-3 align-top"}>
+                <td className="py-2 px-3 align-top">
                   {countdown !== "-" || resetDisplay ? (
-                    compact ? (
-                      <div className="text-[11px] leading-4 text-text-primary">
-                        {countdown !== "-" ? countdown : (resetDisplay || "N/A")}
-                      </div>
-                    ) : (
-                      <div className="space-y-0.5">
-                        {countdown !== "-" && (
-                          <div className="text-sm text-text-primary font-medium">
-                            in {countdown}
-                          </div>
-                        )}
-                        {resetDisplay && (
-                          <div className="text-xs text-text-muted">
-                            {resetDisplay}
-                          </div>
-                        )}
-                      </div>
-                    )
+                    <div className="space-y-0.5">
+                      {countdown !== "-" && (
+                        <div className="text-sm text-text-primary font-medium">
+                          in {countdown}
+                        </div>
+                      )}
+                      {resetDisplay && (
+                        <div className="text-xs text-text-muted">
+                          {resetDisplay}
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <div className={`${compact ? "text-[11px]" : "text-sm"} text-text-muted italic`}>N/A</div>
+                    <div className="text-sm text-text-muted italic">N/A</div>
                   )}
                 </td>
               </tr>
