@@ -10,6 +10,7 @@ import { USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
 
 const REFRESH_INTERVAL_MS = 60000; // 60 seconds
 const COMPACT_MODE_STORAGE_KEY = "provider-limits-compact-mode";
+const EXPANDED_GROUPS_STORAGE_KEY = "provider-limits-expanded-groups";
 const DEFAULT_VISIBLE_PER_GROUP_COMPACT = 2;
 const DEFAULT_VISIBLE_PER_GROUP_NORMAL = 3;
 
@@ -42,6 +43,15 @@ export default function ProviderLimits() {
     } catch {
       // Ignore storage access issues
     }
+
+    try {
+      const savedExpandedGroups = window.localStorage.getItem(EXPANDED_GROUPS_STORAGE_KEY);
+      if (savedExpandedGroups) {
+        setExpandedGroups(JSON.parse(savedExpandedGroups));
+      }
+    } catch {
+      // Ignore storage access issues
+    }
   }, []);
 
   useEffect(() => {
@@ -53,6 +63,19 @@ export default function ProviderLimits() {
       // Ignore storage access issues
     }
   }, [compactMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      window.localStorage.setItem(
+        EXPANDED_GROUPS_STORAGE_KEY,
+        JSON.stringify(expandedGroups)
+      );
+    } catch {
+      // Ignore storage access issues
+    }
+  }, [expandedGroups]);
 
   const fetchConnections = useCallback(async () => {
     try {
